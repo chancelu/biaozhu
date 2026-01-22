@@ -1,0 +1,15 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+
+.vercel/
+.trae/
+tmp-home/
+
+**/node_modules/
+**/.next/
+**/dist/
+
+apps/worker/data.db
+apps/worker/.pw-browsers/
