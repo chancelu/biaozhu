@@ -109,9 +109,13 @@ docker compose up -d --build
 
 1. 把代码推到 GitHub
 2. 打开 Render，选择 **New → Blueprint**
-3. 选择你的仓库，Render 会识别 [render.yaml](file:///Users/ikutamari/Documents/GitHub/biaozhu/render.yaml)
+3. 选择你的仓库，Render 会识别 `render.yaml`
 4. 只需要填一个环境变量：
    - `ARK_API_KEY`
 5. 点击 Deploy，等完成后会给你一个形如 `https://xxx.onrender.com` 的链接
+
+说明：
+- 这个方案下，Render 会注入 `PORT`，公网入口会指向 Web（Next.js）。
+- Worker 固定跑在容器内的 `4000` 端口，Web 通过 `/wapi` 反向代理转发到 Worker。
 
 之后你在任何电脑直接打开这个链接即可使用，不需要登录系统账号（但链接是公开的，建议用 Render 的访问控制/防火墙或 IP 白名单只放行你自己）。
