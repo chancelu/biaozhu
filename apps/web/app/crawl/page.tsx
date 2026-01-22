@@ -15,6 +15,36 @@ type CrawlJob = {
   last_error: string | null;
 };
 
+class FetchError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+function normalizeErrorText(text: string) {
+  const t = (text ?? "").trim();
+  if (!t) return "请求失败";
+  if (t.includes("WORKER_UNREACHABLE")) return "Worker 无法连接（请检查 Render 日志与 WORKER_INTERNAL_URL）";
+  if (/^\s*<!doctype html/i.test(t) || /^\s*<html/i.test(t)) {
+    return "请求失败（上游返回了 HTML 错误页，通常是 Worker 未启动或代理失败）";
+  }
+  try {
+    const parsed = JSON.parse(t) as unknown;
+    if (parsed && typeof parsed === "object" && "error" in parsed && typeof (parsed as any).error === "string") {
+      return (parsed as any).error;
+    }
+  } catch {}
+  return t.length > 300 ? `${t.slice(0, 300)}…` : t;
+}
+
+function formatError(e: unknown) {
+  if (e instanceof FetchError) return normalizeErrorText(e.message);
+  if (e instanceof Error) return normalizeErrorText(e.message);
+  return normalizeErrorText(String(e));
+}
+
 async function postJson<T>(url: string, body: unknown): Promise<T> {
   const res = await fetch(url, {
     method: "POST",
@@ -23,7 +53,7 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text);
+    throw new FetchError(res.status, text);
   }
   return (await res.json()) as T;
 }
@@ -32,7 +62,7 @@ async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text);
+    throw new FetchError(res.status, text);
   }
   return (await res.json()) as T;
 }
@@ -46,6 +76,12 @@ export default function CrawlPage() {
   const [job, setJob] = useState<CrawlJob | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const clearJobState = () => {
+    setJobId("");
+    setJob(null);
+    localStorage.removeItem("mw_crawl_job_id");
+  };
 
   useEffect(() => {
     const saved = localStorage.getItem("mw_crawl_job_id");
@@ -63,10 +99,13 @@ export default function CrawlPage() {
   const tips = useMemo(() => {
     if (!job?.last_error) return null;
     if (job.last_error === "CLOUDFLARE_BLOCKED") {
+      if (!cookieHeader.includes("cf_clearance=")) {
+        return "当前环境被 Cloudflare 人机验证拦截。你粘贴的 Cookie 里没有 cf_clearance（常见只有 notice_* / consent 之类），请从浏览器 Network 里复制包含 cf_clearance= 的整行 Cookie，再重新开始爬取。";
+      }
       return "当前环境被 Cloudflare 人机验证拦截。请先在浏览器正常打开 MakerWorld 后，把 Cookie 粘贴到下面的 Cookie Header（至少包含 cf_clearance），再重新开始爬取。";
     }
     return null;
-  }, [job?.last_error]);
+  }, [job?.last_error, cookieHeader]);
 
   useEffect(() => {
     if (!jobId) return;
@@ -76,7 +115,13 @@ export default function CrawlPage() {
         const j = await getJson<CrawlJob>(workerUrl(`/api/crawl-jobs/${jobId}`));
         if (!cancelled) setJob(j);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+        if (cancelled) return;
+        if (e instanceof FetchError && e.status === 404) {
+          clearJobState();
+          setError("历史任务不存在，已自动清除任务ID；请重新开始爬取");
+          return;
+        }
+        setError(formatError(e));
       }
     };
     tick();
@@ -105,13 +150,15 @@ export default function CrawlPage() {
         startUrl: effectiveStartUrl,
         limitModels: effectiveLimitModels,
         maxScrolls: effectiveMaxScrolls,
+        concurrency: 1,
+        delayMs: 1200,
         cookieHeader: effectiveCookie.trim() ? effectiveCookie.trim() : undefined,
         clearHistory: true,
       });
       setJobId(result.id);
       localStorage.setItem("mw_crawl_job_id", result.id);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(formatError(e));
     } finally {
       setBusy(false);
     }
@@ -126,9 +173,7 @@ export default function CrawlPage() {
   };
 
   const clearJob = async () => {
-    setJobId("");
-    setJob(null);
-    localStorage.removeItem("mw_crawl_job_id");
+    clearJobState();
   };
 
   const pause = async () => {

@@ -9,6 +9,7 @@ const EnvSchema = z.object({
   SQLITE_PATH: z.string().default("./data.db"),
   DB_DIALECT: z.enum(["sqlite", "postgres"]).default("sqlite"),
   PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: z.string().optional(),
+  PLAYWRIGHT_HEADLESS: z.coerce.boolean().default(true),
   PLAYWRIGHT_USER_AGENT: z
     .string()
     .default(

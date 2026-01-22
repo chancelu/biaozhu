@@ -36,8 +36,8 @@ app.post("/api/crawl-jobs", async (req, res) => {
     startUrl: z.string().default("https://makerworld.com/zh/3d-models"),
     limitModels: z.number().int().min(1).max(50000).default(200),
     maxScrolls: z.number().int().min(1).max(5000).default(60),
-    concurrency: z.number().int().min(1).max(5).default(2),
-    delayMs: z.number().int().min(0).max(5000).default(200),
+    concurrency: z.number().int().min(1).max(5).default(1),
+    delayMs: z.number().int().min(0).max(5000).default(1200),
     cookieHeader: z.string().optional(),
     clearHistory: z.boolean().default(true),
   });

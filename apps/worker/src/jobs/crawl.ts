@@ -13,6 +13,16 @@ export interface CrawlJobConfig {
   cookieHeader?: string;
 }
 
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function withJitter(baseMs: number) {
+  const base = Math.max(0, Math.floor(baseMs));
+  const jitter = Math.min(800, Math.max(0, Math.floor(base / 2)));
+  return base + (jitter > 0 ? Math.floor(Math.random() * (jitter + 1)) : 0);
+}
+
 export async function runCrawlJob(db: Kysely<Database>, jobId: string) {
   const job = await db.selectFrom("crawl_jobs").selectAll().where("id", "=", jobId).executeTakeFirst();
   if (!job) throw new Error("job not found");
@@ -164,7 +174,7 @@ export async function runCrawlJob(db: Kysely<Database>, jobId: string) {
               .execute();
           } finally {
             if (config.delayMs > 0) {
-              await new Promise((r) => setTimeout(r, config.delayMs));
+              await sleep(withJitter(config.delayMs));
             }
           }
         }
@@ -367,7 +377,7 @@ export async function runCrawlJob(db: Kysely<Database>, jobId: string) {
 
         if (discoveredIds.size >= config.limitModels) break;
         await listPage.mouse.wheel(0, 2600);
-        await listPage.waitForTimeout(900);
+        await listPage.waitForTimeout(withJitter(900));
       }
 
       discoveryDone = true;

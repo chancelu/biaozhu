@@ -36,7 +36,7 @@ export function extractModelIdAndUrl(href: string): DiscoveredModel | null {
 export async function withBrowser<T>(fn: (browser: Browser) => Promise<T>) {
   const executablePath = resolveChromiumExecutablePath(env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH);
   const browser = await chromium.launch({
-    headless: true,
+    headless: env.PLAYWRIGHT_HEADLESS,
     executablePath,
     args: ["--disable-blink-features=AutomationControlled"],
   });
@@ -47,19 +47,49 @@ export async function withBrowser<T>(fn: (browser: Browser) => Promise<T>) {
   }
 }
 
+function parseCookieHeader(cookieHeader: string) {
+  const out: Array<{ name: string; value: string }> = [];
+  for (const part of cookieHeader.split(";")) {
+    const p = part.trim();
+    if (!p) continue;
+    const idx = p.indexOf("=");
+    if (idx <= 0) continue;
+    const name = p.slice(0, idx).trim();
+    const value = p.slice(idx + 1).trim();
+    if (!name || !value) continue;
+    out.push({ name, value });
+  }
+  return out;
+}
+
+async function applyCookieHeader(context: BrowserContext, cookieHeader: string) {
+  const pairs = parseCookieHeader(cookieHeader);
+  if (pairs.length === 0) return;
+  await context.addCookies(
+    pairs.map((c) => ({
+      name: c.name,
+      value: c.value,
+      url: "https://makerworld.com",
+    })),
+  );
+  await context.setExtraHTTPHeaders({ cookie: cookieHeader });
+}
+
 export async function createContext(options?: { cookieHeader?: string }) {
   const executablePath = resolveChromiumExecutablePath(env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH);
   const browser = await chromium.launch({
-    headless: true,
+    headless: env.PLAYWRIGHT_HEADLESS,
     executablePath,
     args: ["--disable-blink-features=AutomationControlled"],
   });
   const context = await browser.newContext({
     userAgent: env.PLAYWRIGHT_USER_AGENT,
     viewport: { width: 1280, height: 720 },
+    locale: "zh-CN",
+    timezoneId: "Asia/Shanghai",
   });
   if (options?.cookieHeader) {
-    await context.setExtraHTTPHeaders({ cookie: options.cookieHeader });
+    await applyCookieHeader(context, options.cookieHeader);
   }
   return { browser, context };
 }
